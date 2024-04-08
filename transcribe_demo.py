@@ -1,4 +1,4 @@
-#! python3.7
+#! python3.12  recommend ≥3.10
 
 import argparse
 import os
