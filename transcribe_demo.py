@@ -6,8 +6,9 @@ import numpy as np
 import speech_recognition as sr
 import whisper
 import torch
+import pytz
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from queue import Queue
 from time import sleep
 from sys import platform
@@ -15,17 +16,11 @@ from sys import platform
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="medium", help="Model to use",
-                        choices=["tiny", "base", "small", "medium", "large"])
-    parser.add_argument("--non_english", action='store_true',
-                        help="Don't use the english model.")
-    parser.add_argument("--energy_threshold", default=1000,
-                        help="Energy level for mic to detect.", type=int)
-    parser.add_argument("--record_timeout", default=2,
-                        help="How real time the recording is in seconds.", type=float)
-    parser.add_argument("--phrase_timeout", default=3,
-                        help="How much empty space between recordings before we "
-                             "consider it a new line in the transcription.", type=float)
+    parser.add_argument("--model", default="medium", help="Model to use", choices=["tiny", "base", "small", "medium", "large", "large-v3"])
+    parser.add_argument("--language", default="de", help="Language to use", choices=["en", "de", "es", "fr", "it", "nl", "pl", "pt", "ru", "tr", "zh"])	
+    parser.add_argument("--energy_threshold", default=1000, help="Energy level for mic to detect.", type=int)
+    parser.add_argument("--record_timeout", default=2, help="How real time the recording is in seconds.", type=float)
+    parser.add_argument("--phrase_timeout", default=3, help="How much empty space between recordings before we consider it a new line in the transcription.", type=float)
     if 'linux' in platform:
         parser.add_argument("--default_microphone", default='pulse',
                             help="Default microphone name for SpeechRecognition. "
@@ -58,11 +53,11 @@ def main():
                     break
     else:
         source = sr.Microphone(sample_rate=16000)
-
+    
     # Load / Download model
     model = args.model
-    if args.model != "large" and not args.non_english:
-        model = model + ".en"
+    if args.model != "large-v3" and args.language != "de":
+        model = model + "." + args.language
     audio_model = whisper.load_model(model)
 
     record_timeout = args.record_timeout
@@ -88,10 +83,13 @@ def main():
 
     # Cue the user that we're ready to go.
     print("Model loaded.\n")
+    
+    now = datetime.now(pytz.timezone('Europe/Berlin'))
+    filename = now.strftime('%Y%m%d_%H%M%S_output.txt')
 
     while True:
         try:
-            now = datetime.utcnow()
+            now = datetime.now(pytz.timezone('Europe/Berlin'))
             # Pull raw recorded audio from the queue.
             if not data_queue.empty():
                 phrase_complete = False
@@ -128,6 +126,12 @@ def main():
                     print(line)
                 # Flush stdout.
                 print('', end='', flush=True)
+                
+                # Write the transcription to a file.
+                with open(filename, 'a') as f:
+                    for line in transcription:
+                        f.write(line + '\n')
+                    
             else:
                 # Infinite loops are bad for processors, must sleep.
                 sleep(0.25)
